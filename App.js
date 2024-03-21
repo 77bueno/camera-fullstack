@@ -1,39 +1,69 @@
-import { Camera, CameraType } from 'expo-camera';
-import { useState } from 'react';
-import { Button, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Button, Image } from 'react-native';
+import { Camera } from 'expo-camera';
+import * as FileSystem from 'expo-file-system';
 
 export default function App() {
-  const [type, setType] = useState(CameraType.back);
-  const [permission, requestPermission] = Camera.useCameraPermissions();
+  const [hasPermission, setHasPermission] = useState(null);
+  const [type, setType] = useState(Camera.Constants.Type.back);
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
 
-  if (!permission) {
-    // Camera permissions are still loading
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync()
+      setHasPermission(status === 'granted');
+    })();
+  }, []);
+
+  const takePicture = async () => {
+    if (cameraRef) {
+      const photo = await cameraRef.takePictureAsync();
+      setCapturedPhoto(photo.uri);
+    }
+  };
+
+  const savePhoto = async () => {
+    if (capturedPhoto) {
+      const filename = capturedPhoto.substring(capturedPhoto.lastIndexOf('/') + 1);
+      const newPath = FileSystem.documentDirectory + filename;
+      try {
+        await FileSystem.moveAsync({
+          from: capturedPhoto,
+          to: newPath,
+        });
+        setCapturedPhoto(null);
+        alert('Photo saved successfully!');
+      } catch (error) {
+        console.error('Error saving photo:', error);
+      }
+    }
+  };
+
+  let cameraRef = null;
+
+  if (hasPermission === null) {
     return <View />;
   }
 
-  if (!permission.granted) {
-    // Camera permissions are not granted yet
-    return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: 'center' }}>We need your permission to show the camera</Text>
-        <Button onPress={requestPermission} title="grant permission" />
-      </View>
-    );
-  }
-
-  function toggleCameraType() {
-    setType(current => (current === CameraType.back ? CameraType.front : CameraType.back));
+  if (hasPermission === false) {
+    return <Text>No access to camera</Text>;
   }
 
   return (
     <View style={styles.container}>
-      <Camera style={styles.camera} type={type}>
+      <Camera style={styles.camera} type={type} ref={(ref) => { cameraRef = ref; }}>
         <View style={styles.buttonContainer}>
-          <Pressable style={styles.button} onPress={toggleCameraType}>
-            <Text style={styles.text}>Flip Camera</Text>
-          </Pressable>
+          <TouchableOpacity style={styles.button} onPress={takePicture}>
+            <Text style={styles.text}>Take Picture</Text>
+          </TouchableOpacity>
         </View>
       </Camera>
+      {capturedPhoto && (
+        <View style={styles.previewContainer}>
+          <Image source={{ uri: capturedPhoto }} style={styles.previewImage} />
+          <Button title="Save Photo" onPress={savePhoto} />
+        </View>
+      )}
     </View>
   );
 }
@@ -41,25 +71,34 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
   },
   camera: {
     flex: 1,
   },
   buttonContainer: {
     flex: 1,
-    flexDirection: 'row',
     backgroundColor: 'transparent',
-    margin: 64,
+    flexDirection: 'row',
+    margin: 20,
+    justifyContent: 'center',
   },
   button: {
-    flex: 1,
     alignSelf: 'flex-end',
     alignItems: 'center',
   },
   text: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 18,
+    marginBottom: 10,
     color: 'white',
+  },
+  previewContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewImage: {
+    width: 300,
+    height: 400,
+    resizeMode: 'contain',
   },
 });
